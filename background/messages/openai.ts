@@ -20,6 +20,9 @@ const handler: PlasmoMessaging.MessageHandler<RequestBody, ResponseBody> = async
   const storage = new Storage()
   const apiKey = await storage.get("openai-key");
   const openai = new OpenAIApi(new Configuration({apiKey}));
+
+  console.log(JSON.stringify(req.body.messages, null, 2));
+
   const completion = await openai.createChatCompletion({
     model: "gpt-3.5-turbo",
     messages: req.body.messages,
@@ -34,7 +37,9 @@ const handler: PlasmoMessaging.MessageHandler<RequestBody, ResponseBody> = async
   //   "finish_reason": "stop"
   // }],
 
-  let message = completion.data.choices[0].message.content;
+  let message = completion.data.choices[0].message.content.trim();
+
+  console.log(message);
 
   res.send({
     message
