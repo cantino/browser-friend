@@ -24,7 +24,8 @@ const handler: PlasmoMessaging.MessageHandler<RequestBody, ResponseBody> = async
   console.log(JSON.stringify(req.body.messages, null, 2));
 
   const completion = await openai.createChatCompletion({
-    model: "gpt-3.5-turbo",
+    // model: "gpt-3.5-turbo",
+    model: "gpt-4",
     messages: req.body.messages,
   }, { adapter: fetchAdapter });
 
