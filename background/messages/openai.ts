@@ -8,43 +8,42 @@ export interface ChatMessage {
   content: string;
 }
 
-export type RequestBody = {
+export type OpenaiRequestBody = {
   messages: ChatMessage[]
 }
 
-export type ResponseBody = {
-  message: string
+export type OpenaiResponseBody = {
+  message?: string;
+  error?: string;
 }
 
-const handler: PlasmoMessaging.MessageHandler<RequestBody, ResponseBody> = async (req, res) => {
+const handler: PlasmoMessaging.MessageHandler<OpenaiRequestBody, OpenaiResponseBody> = async (req, res) => {
   const storage = new Storage()
   const apiKey = await storage.get("openai-key");
   const openai = new OpenAIApi(new Configuration({apiKey}));
 
   console.log(JSON.stringify(req.body.messages, null, 2));
 
-  const completion = await openai.createChatCompletion({
-    // model: "gpt-3.5-turbo",
-    model: "gpt-4",
-    messages: req.body.messages,
-  }, { adapter: fetchAdapter });
+  try {
+    const completion = await openai.createChatCompletion({
+      // model: "gpt-3.5-turbo",
+      model: "gpt-4",
+      messages: req.body.messages,
+    }, { adapter: fetchAdapter });
 
-  // "choices": [{
-  //   "index": 0,
-  //   "message": {
-  //     "role": "assistant",
-  //     "content": "\n\nHello there, how may I assist you today?",
-  //   },
-  //   "finish_reason": "stop"
-  // }],
+    let message = completion.data.choices[0].message.content.trim();
 
-  let message = completion.data.choices[0].message.content.trim();
+    console.log(message);
 
-  console.log(message);
-
-  res.send({
-    message
-  })
+    res.send({
+      message
+    })
+  } catch (e) {
+    console.error(e);
+    res.send({
+      error: e.message
+    })
+  }
 }
 
 export default handler

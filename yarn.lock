@@ -2362,6 +2362,11 @@ css-select@^4.1.3:
     domutils "^2.8.0"
     nth-check "^2.0.1"
 
+css-selector-generator@^3.6.4:
+  version "3.6.4"
+  resolved "https://registry.yarnpkg.com/css-selector-generator/-/css-selector-generator-3.6.4.tgz#92966f14447cb900950777e2f919daa23bcb8a86"
+  integrity sha512-/VDUW5KAoxGXJPNcn+5Y0DLJMQumLk9zNMWl2NChuTwGLEFeqfnddCpRhY6uZ77ar0uyM7W7ilvIWsk7DpjKxQ==
+
 css-tree@^1.1.2, css-tree@^1.1.3:
   version "1.1.3"
   resolved "https://registry.yarnpkg.com/css-tree/-/css-tree-1.1.3.tgz#eb4870fb6fd7707327ec95c2ff2ab09b5e8db91d"

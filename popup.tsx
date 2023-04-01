@@ -5,9 +5,11 @@ import { useStorage } from "@plasmohq/storage/hook"
 import { sendToBackground } from "@plasmohq/messaging"
 import ReactMarkdown from 'react-markdown'
 
-import type { ChatMessage, RequestBody, ResponseBody } from "~background/messages/openai"
+import type { ChatMessage, OpenaiRequestBody, OpenaiResponseBody } from "~background/messages/openai"
 import { gptTruncate } from "~helpers/openaiChatApiHelpers";
 import { encode as gptEncode } from "gptoken";
+import { sendToContentScript } from "~node_modules/@plasmohq/messaging";
+import type { ContentRequestBody, ContentResponseBody } from "~contents/pageRequestHandler";
 
 function nextTick(param: () => void) {
   setTimeout(() => {
@@ -25,19 +27,17 @@ async function getCurrentTabUrl() {
 }
 
 // Reminder: Copy the following into the prompt when changed!
-type RequestDOMStructureOverview = "RequestDOMStructureOverview"; // Receive the DOM from the current page
-type RequestPageText = "RequestPageText" // Request the visible text of the current page
-type Click = { cssSelector: string }; // To click on links, buttons, checkboxes, etc
+type RequestDOM = { cssSelector: string }; // Receive a summarized DOM for a selector. Use 'body' to start if you don't already know the region. Do this before using RequestText!
+type RequestText = { cssSelector: string }; // Request the visible text inside of a page region
+type GetSelection = "GetSelection"; // Request the user's currently highlighted text
 type Fill = { cssSelector: string, text: string } // To fill in form fields
-type Navigate = { url: string } // To navigate to a URL
-type Search = { query: string }; // To search Google for a given query
 type Calculate = { jsFormula: string } // To eval arbitrary JS in a sandbox, and return the result to the assistant (the user does not see it).
 type Respond = { textToDisplay: string } // To display a response to the user
 type AssistantResponse = {
   plan: string[];
   nextAction: {
-    type: "RequestDOMStructureOverview" | "RequestPageText" | "Click" | "Fill" | "Navigate" | "Search" | "Calculate" | "Respond";
-    params: RequestDOMStructureOverview | RequestPageText | Click | Fill | Navigate | Search | Calculate | Respond;
+    type: "RequestDOM" | "RequestText" | "GetSelection" | "Fill" | "Calculate" | "Respond";
+    params: RequestDOM | RequestText | GetSelection | Fill | Calculate | Respond;
   }
 };
 
@@ -54,32 +54,32 @@ function addReminders(messages: ChatMessage[]) {
 
 async function injectContext(messages: ChatMessage[]): Promise<ChatMessage[]> {
   let prompt = `
-You are a helpful virtual assistant in a Chrome extension.
+You are a helpful virtual assistant in a browser extension. You have some tools that you can use to help your user, and
+your job is to combine these tools to accomplish the user's goal. If you believe a goal is impossible, or if you
+find yourself looping too long, then just tell the user that you can't do it.
 
-You're currently at the url: ${await getCurrentTabUrl()}
+You're currently at the url (the user may refer to it as 'this' or 'the page' or similar): ${await getCurrentTabUrl()}
 
 You have the following TypeScript types available to you:
-type RequestDOMStructureOverview = "RequestDOMStructureOverview"; // Receive the DOM from the current page
-type RequestPageText = "RequestPageText" // Request the visible text of the current page
-type Click = { cssSelector: string }; // To click on links, buttons, checkboxes, etc
+type RequestDOM = { cssSelector: string }; // Receive a summarized DOM for a selector. Use 'body' to start if you don't already know the region. Do this before using RequestText!
+type RequestText = { cssSelector: string }; // Request the visible text inside of a page region
+type GetSelection = "GetSelection"; // Request the user's currently highlighted text
 type Fill = { cssSelector: string, text: string } // To fill in form fields
-type Navigate = { url: string } // To navigate to a URL
-type Search = { query: string }; // To search Google for a given query
 type Calculate = { jsFormula: string } // To eval arbitrary JS in a sandbox, and return the result to the assistant (the user does not see it).
 type Respond = { textToDisplay: string } // To display a response to the user
 type AssistantResponse = {
   plan: string[];
   nextAction: {
-    type: "RequestDOMStructureOverview" | "RequestPageText" | "Click" | "Fill" | "Navigate" | "Search" | "Calculate" | "Respond";
-    params: RequestDOMStructureOverview | RequestPageText | Click | Fill | Navigate | Search | Calculate | Respond;
+    type: "RequestDOM" | "RequestText" | "GetSelection" | "Fill" | "Calculate" | "Respond";
+    params: RequestDOM | RequestText | GetSelection | Fill | Calculate | Respond;
   }
 };
 
 After every user message, respond with a single AssistantResponse structure. For example, here are some User messages and their first AssistantResponse:
 "What time is it in France?" => { "plan": ["Determine current user time", "Compute current time in France", "Inform the user"], "nextAction": { "type": "Calculate", "params": { "jsFormula": "new Date().toUTCString();" } } }
-"Who is Sam Altman?" => { "plan": ["Search for Sam Altman", "Select best link", "Visit link", "Request page text", "Summarize and inform the user"], "nextAction": { "type": "Search", "params": { "query": "Sam Altman" } } }
+"Please put a relevant poem in the comment box" => { "plan": ["Request DOM overview", "Request text from likely main content region", "Write poem and insert into likely comment box", "Request page text", "Summarize and inform the user"], "nextAction": { "type": "RequestDOM", "params": { "cssSelector": "body" } } }
 
-Remember, ALL ASSISTANT RESPONSES SHOULD BE IN THE FORM OF A SINGLE AssistantResponse OBJECT AS JSON.`.trim();
+ALL YOUR RESPONSES FROM NOW ON MUST BE IN THE FORM OF A SINGLE AssistantResponse OBJECT AS JSON.`.trim();
 
   let secondPrompt = `
 {
@@ -90,12 +90,76 @@ Remember, ALL ASSISTANT RESPONSES SHOULD BE IN THE FORM OF A SINGLE AssistantRes
   }
 }`.trim();
 
-  return [{ role: "system", content: prompt }, { role: "assistant", content: secondPrompt}, ...gptTruncate(addReminders(messages), gptEncode(`${prompt} ${secondPrompt}`).length + 100)];
+  return [{ role: "user", content: prompt }, { role: "assistant", content: secondPrompt}, ...gptTruncate(addReminders(messages), gptEncode(`${prompt} ${secondPrompt}`).length + 100)];
 }
 
+const renderParams = (nextAction) => {
+  switch (nextAction.type) {
+    case "RequestDOM":
+    case "RequestText":
+      return (
+        <div style={{ fontFamily: "monospace" }}>
+          {JSON.stringify(nextAction.params, null, 2)}
+        </div>
+      );
+    case "Fill":
+      return (
+        <div style={{ fontFamily: "monospace" }}>
+          {JSON.stringify(nextAction.params, null, 2)}
+        </div>
+      );
+    case "Calculate":
+      return (
+        <code style={{ fontFamily: "monospace", whiteSpace: "pre-wrap" }}>
+          {nextAction.params.jsFormula}
+        </code>
+      );
+    case "Respond":
+      return <span>{nextAction.params.textToDisplay}</span>;
+    case "GetSelection":
+      return <span></span>;
+    default:
+      return null;
+  }
+};
+
+const renderPlan = (plan) => {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap" }}>
+      {plan.map((step, index) => (
+        <div
+          key={index}
+          style={{
+            backgroundColor: index === 0 ? "#00A7F7" : "rgba(0, 167, 247, 0.3)",
+            color: index === 0 ? "#fff" : "#000",
+            borderRadius: 4,
+            padding: "2px 4px",
+            marginRight: 4,
+            marginBottom: 4,
+          }}
+        >
+          {step}
+        </div>
+      ))}
+    </div>
+  );
+};
+
 function renderMessage(msg: ChatMessage) {
+  function truncate(parsed) {
+    let string = parsed.error || parsed.result || parsed.text || Object.entries(parsed).find(([key, _]) => key !== 'cssSelector')?.[1];
+    string = JSON.stringify(string);
+    let max = 500;
+    if (string.length > max) {
+      return string.slice(0, max/2) + ' [...] ' + string.slice(-max/2);
+    } else {
+      return string;
+    }
+  }
+
   if (msg.role === "system") {
     try {
+      let parsed = JSON.parse(msg.content);
       return <div
         style={{
           padding: "6px 12px",
@@ -104,18 +168,36 @@ function renderMessage(msg: ChatMessage) {
           display: "inline-block",
         }}
       >
-        <i>{`= ${JSON.parse(msg.content).result}`}</i>
+        <i>{`= ${(truncate(parsed))}`}</i>
       </div>;
     } catch (e) {
       return <div>{`(${msg.content})`}</div>
     }
   } else if (msg.role === "assistant") {
+    if (msg.content === '🤔') return <div>🤔</div>;
     let response = assistantResponseFromString(msg.content);
-    switch (response && response.nextAction.type) {
-      case "Respond":
-        return <ReactMarkdown skipHtml={true}>{`**Bot**: ${(response && response.nextAction.params as Respond).textToDisplay}`}</ReactMarkdown>;
-      default:
-        return <div>{`Bot action: ${msg.content}`}</div>;
+    if (!response) {
+      return `Invalid AssistantResponse: ${msg.content}`;
+    }
+
+    if (response.nextAction.type === "Respond") {
+      return (
+        <ReactMarkdown skipHtml={true}>{`**Bot**: ${(response && response.nextAction.params as Respond).textToDisplay}`}</ReactMarkdown>
+      );
+    } else {
+      return (
+        <div
+          style={{
+            padding: "6px 6px",
+            border: "1px solid rgba(0, 0, 0, 0.1)",
+          }}
+        >
+          <div style={{ fontWeight: "bold", marginBottom: "6px" }}>{response.nextAction.type}:</div>
+          <div style={{ marginBottom: "6px" }}>{renderParams(response.nextAction)}</div>
+          <div style={{ fontWeight: "bold", marginBottom: "6px" }}>Plan:</div>
+          <div style={{  }}>{renderPlan(response.plan)}</div>
+        </div>
+      );
     }
   } else {
     return <ReactMarkdown skipHtml={true}>{`**User**: ${msg.content}`}</ReactMarkdown>
@@ -137,6 +219,7 @@ const assistantResponseFromString = (responseString: string): false | AssistantR
 function IndexPopup() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const chatWindowRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [openaiKey] = useStorage<string>("openai-key");
   const [message, setMessage] = useState("");
   const [storage] = useState(() => {
@@ -153,11 +236,25 @@ function IndexPopup() {
     }
   }, [chatLog]);
 
+  useEffect(() => {
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+        }
+      }, 250);
+  }, []);
+
   const handleAssistantResponse = async (response: AssistantResponse, callback: (msg: ChatMessage) => void) => {
-    // If nextAction is a Calculate, we need to send a message to the background script to eval the JS.
     if (response.nextAction.type === "Calculate") {
       await handleCalculate(response.nextAction.params as Calculate, iframeRef, callback);
-      // } else if (response.nextAction.type === "Respond") {
+    } else if (response.nextAction.type === "RequestDOM") {
+      await handleRequestDOM(response.nextAction.params as RequestDOM, callback);
+    } else if (response.nextAction.type === "RequestText") {
+      await handleRequestText(response.nextAction.params as RequestText, callback);
+    } else if (response.nextAction.type === "Fill") {
+      await handleFill(response.nextAction.params as Fill, callback);
+    } else if (response.nextAction.type === "GetSelection") {
+      await handleGetSelection(response.nextAction.params as GetSelection, callback);
     }
   }
 
@@ -174,24 +271,92 @@ function IndexPopup() {
     iframeRef.current.contentWindow.postMessage(params.jsFormula, "*")
   }
 
+  async function handleFill(params: Fill, callback: (msg: ChatMessage) => void) {
+    const resp = await sendToContentScript<ContentRequestBody, ContentResponseBody>({
+      name: "pageRequestHandler",
+      body: {
+        action: "fill",
+        params: { cssSelector: params.cssSelector, text: params.text },
+      }
+    });
+
+    if (resp.result) {
+      callback({ role: "system", content: JSON.stringify({ cssSelector: params.cssSelector, fillResult: resp.result }) });
+    } else {
+      callback({ role: "system", content: JSON.stringify({ cssSelector: params.cssSelector, fillError: resp.error }) });
+    }
+  }
+
+  async function handleGetSelection(params: GetSelection, callback: (msg: ChatMessage) => void) {
+    const resp = await sendToContentScript<ContentRequestBody, ContentResponseBody>({
+      name: "pageRequestHandler",
+      body: {
+        action: "getSelection",
+        params: {},
+      }
+    });
+
+    if (resp.result !== undefined && resp.result !== null) {
+      callback({ role: "system", content: JSON.stringify({ userSelection: resp.result }) });
+    } else {
+      callback({ role: "system", content: JSON.stringify({ fillError: resp.error }) });
+    }
+  }
+
+  async function handleRequestDOM(params: RequestDOM, callback: (msg: ChatMessage) => void) {
+    const resp = await sendToContentScript<ContentRequestBody, ContentResponseBody>({
+      name: "pageRequestHandler",
+      body: {
+        action: "getDOM",
+        params: { cssSelector: params.cssSelector },
+      }
+    });
+
+    if (resp.result) {
+      callback({ role: "system", content: JSON.stringify({ cssSelector: params.cssSelector, dom: JSON.parse(resp.result) }) });
+    } else {
+      callback({ role: "system", content: JSON.stringify({ cssSelector: params.cssSelector, error: resp.error }) });
+    }
+  }
+
+  async function handleRequestText(params: RequestText, callback: (msg: ChatMessage) => void) {
+    const resp = await sendToContentScript<ContentRequestBody, ContentResponseBody>({
+      name: "pageRequestHandler",
+      body: {
+        action: "getText",
+        params: { cssSelector: params.cssSelector },
+      }
+    });
+
+    if (resp.result) {
+      callback({ role: "system", content: JSON.stringify({ cssSelector: params.cssSelector, text: resp.result }) });
+    } else {
+      callback({ role: "system", content: JSON.stringify({ cssSelector: params.cssSelector, error: resp.error }) });
+    }
+  }
+
   async function sendToBot(chatLog: ChatMessage[]) {
-    const resp = await sendToBackground<RequestBody, ResponseBody>({
+    const resp = await sendToBackground<OpenaiRequestBody, OpenaiResponseBody>({
       name: "openai",
       body: {
         messages: await injectContext(chatLog),
       }
     });
 
-    let assistantResponse = assistantResponseFromString(resp.message);
-    if (assistantResponse !== false) {
-      await setChatLog([...chatLog, { role: "assistant", content: resp.message }]);
-      let callback = async (msg: ChatMessage) => {
-        await setChatLog([...chatLog, { role: "assistant", content: resp.message }, msg]);
-        await sendToBot([...chatLog, { role: "assistant", content: resp.message }, msg]);
-      };
-      nextTick(() => handleAssistantResponse(assistantResponse && assistantResponse, callback));
+    if (resp.message) {
+      let assistantResponse = assistantResponseFromString(resp.message);
+      if (assistantResponse !== false) {
+        await setChatLog([...chatLog, { role: "assistant", content: resp.message }]);
+        let callback = async (msg: ChatMessage) => {
+          await setChatLog([...chatLog, { role: "assistant", content: resp.message }, msg]);
+          await sendToBot([...chatLog, { role: "assistant", content: resp.message }, msg]);
+        };
+        nextTick(() => handleAssistantResponse(assistantResponse && assistantResponse, callback));
+      } else {
+        await setChatLog([...chatLog, { role: "system", content: `Assistant provided an invalid AssistantResponse object: ${resp.message}` }]);
+      }
     } else {
-      await setChatLog([...chatLog, { role: "system", content: "Assistant provided an invalid AssistantResponse object." }]);
+      await setChatLog([...chatLog, { role: "system", content: `OpenAI error: ${resp.error}` }]);
     }
   }
 
@@ -231,7 +396,9 @@ function IndexPopup() {
       >
         {chatLog.map((msg, idx) => (
           <div key={`${JSON.stringify(msg)}-${idx}`} style={{ marginBottom: "14px", position: "relative" }}>
-            {renderMessage(msg)}
+            <div style={{ width: "92%" }}>
+              {renderMessage(msg)}
+            </div>
             {!(msg.role === "assistant" && msg.content === '🤔') && (
               <span
                 onClick={async () => {
@@ -261,6 +428,7 @@ function IndexPopup() {
       </div>
       <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column" }}>
         <input
+          ref={inputRef}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           style={{ marginBottom: 8, padding: 8, borderRadius: 4, borderWidth: 1, borderColor: "#ccc" }}
