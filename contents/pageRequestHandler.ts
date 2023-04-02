@@ -1,4 +1,3 @@
-import type { PlasmoMessaging } from "@plasmohq/messaging"
 import { fill } from "~helpers/domHelpers";
 import { getCssSelector } from 'css-selector-generator';
 
@@ -186,10 +185,6 @@ chrome.runtime.onMessage.addListener(async function (message, tab, res) {
     }
   }
 });
-
-const handler: PlasmoMessaging.MessageHandler<ContentRequestBody, ContentResponseBody> = async (req, res) => {
-  console.log("here!", req, res);
-}
 
 // For Plasmo for some reason.
 export {};
