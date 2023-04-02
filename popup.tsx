@@ -413,7 +413,7 @@ function IndexPopup() {
                   style={{
                     position: "absolute",
                     top: 0,
-                    right: 0,
+                    right: "-4px",
                     cursor: "pointer",
                     fontSize: 12,
                     fontWeight: "bold",
@@ -436,7 +436,7 @@ function IndexPopup() {
                   style={{
                     position: "absolute",
                     top: 0,
-                    right: "20px",
+                    right: "14px",
                     cursor: "pointer",
                     fontSize: 12,
                     fontWeight: "bold",

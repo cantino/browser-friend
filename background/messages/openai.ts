@@ -20,14 +20,14 @@ export type OpenaiResponseBody = {
 const handler: PlasmoMessaging.MessageHandler<OpenaiRequestBody, OpenaiResponseBody> = async (req, res) => {
   const storage = new Storage()
   const apiKey = await storage.get("openai-key");
+  const apiModel = await storage.get("openai-model") || "gpt-4";
   const openai = new OpenAIApi(new Configuration({apiKey}));
 
   console.log(JSON.stringify(req.body.messages, null, 2));
 
   try {
     const completion = await openai.createChatCompletion({
-      // model: "gpt-3.5-turbo",
-      model: "gpt-4",
+      model: apiModel,
       messages: req.body.messages,
     }, { adapter: fetchAdapter });
 
