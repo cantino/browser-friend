@@ -22,11 +22,27 @@ function findLabelFor(element: HTMLElement): string | null {
   return null;
 }
 
+function isVisible(element) {
+  if (!element || element.offsetWidth === 0 || element.offsetHeight === 0) {
+    return false;
+  }
+
+  const style = window.getComputedStyle(element);
+  const isHiddenType = element.tagName.toLowerCase() === 'input' && element.type.toLowerCase() === 'hidden';
+  const rect = element.getBoundingClientRect();
+  const isOffScreen = rect.top + rect.height < 0 || rect.left + rect.width < 0 || rect.right - rect.width > window.innerWidth;
+
+  return style.display !== 'none' && style.visibility !== 'hidden' && !isHiddenType && !isOffScreen;
+}
+
 function getFormElements(node: HTMLElement): AnalyzedFormElement[] {
   const elements: AnalyzedFormElement[] = [];
   const formElements = node.querySelectorAll('input, textarea, select');
 
   formElements.forEach((formElement: HTMLElement) => {
+    // Skip if the fromElement is not visible.
+    if (!isVisible(formElement)) return;
+
     const elementType = formElement.tagName.toLowerCase();
     const typeAttribute = (formElement as HTMLInputElement).type;
     const elementName = (formElement as HTMLInputElement).name;
@@ -42,7 +58,7 @@ function getFormElements(node: HTMLElement): AnalyzedFormElement[] {
     const label = findLabelFor(formElement);
 
     let newElement: AnalyzedFormElement = {
-      cssSelector: getCssSelector(formElement),
+      cssSelector: getCssSelector(formElement, { includeTag: true }),
       elementType: analyzedElementType,
     };
 
@@ -86,7 +102,7 @@ function analyzePageElements(node: HTMLElement): AnalyzedElement[] {
   headerElements.forEach((header) => {
     if (header.textContent.length > 3 && header.textContent.length < 300) {
       elements.push({
-        cssSelector: getCssSelector(header),
+        cssSelector: getCssSelector(header, { includeTag: true }),
         elementType: 'header',
         content: header.textContent,
       });

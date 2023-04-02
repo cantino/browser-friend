@@ -55,13 +55,12 @@ function addReminders(messages: ChatMessage[]) {
 async function injectContext(messages: ChatMessage[]): Promise<ChatMessage[]> {
   let prompt = `
 You are a helpful virtual assistant in a browser extension. You have some tools that you can use to help your user, and
-your job is to combine these tools to accomplish the user's goal. If you believe a goal is impossible, or if you
-find yourself looping too long, then just tell the user that you can't do it.
+your job is to combine these tools to accomplish the user's goal.
 
 You're currently at the url (the user may refer to it as 'this' or 'the page' or similar): ${await getCurrentTabUrl()}
 
 You have the following TypeScript types available to you:
-type RequestDOM = { cssSelector: string }; // Receive a summarized DOM for a selector. Use 'body' to start if you don't already know the region. Do this before using RequestText!
+type RequestDOM = { cssSelector: string }; // Receive a summarized DOM for a selector. Use 'body' to start if you don't already know the region. Do this before using Fill or RequestText!
 type RequestText = { cssSelector: string }; // Request the visible text inside of a page region
 type GetSelection = "GetSelection"; // Request the user's currently highlighted text
 type Fill = { cssSelector: string, text: string } // To fill in form fields
@@ -74,6 +73,9 @@ type AssistantResponse = {
     params: RequestDOM | RequestText | GetSelection | Fill | Calculate | Respond;
   }
 };
+
+If you believe a goal is impossible, or if you find yourself encountering and error or looping, then just tell the user that you can't do it.
+Remember to use RequestDOM on the body before generating cssSelectors: don't just guess CSS selectors!
 
 After every user message, respond with a single AssistantResponse structure. For example, here are some User messages and their first AssistantResponse:
 "What time is it in France?" => { "plan": ["Determine current user time", "Compute current time in France", "Inform the user"], "nextAction": { "type": "Calculate", "params": { "jsFormula": "new Date().toUTCString();" } } }
@@ -147,7 +149,7 @@ const renderPlan = (plan) => {
 
 function renderMessage(msg: ChatMessage) {
   function truncate(parsed) {
-    let string = parsed.error || parsed.result || parsed.text || Object.entries(parsed).find(([key, _]) => key !== 'cssSelector')?.[1];
+    let string = parsed.error || parsed.result || parsed.text || Object.entries(parsed).find(([key, _]) => key !== 'cssSelector')?.[1] || parsed;
     string = JSON.stringify(string);
     let max = 500;
     if (string.length > max) {
@@ -171,7 +173,7 @@ function renderMessage(msg: ChatMessage) {
         <i>{`= ${(truncate(parsed))}`}</i>
       </div>;
     } catch (e) {
-      return <div>{`(${msg.content})`}</div>
+      return <div>{`${e.message} (${msg.content})`}</div>
     }
   } else if (msg.role === "assistant") {
     if (msg.content === '🤔') return <div>🤔</div>;
@@ -380,13 +382,14 @@ function IndexPopup() {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", padding: 16, minWidth: 400, minHeight: 400 }}>
+    <div style={{ display: "flex", flexDirection: "column", padding: 16, minWidth: 400, minHeight: 500 }}>
       <h2 style={{ marginBottom: 16 }}>Browser Friend</h2>
       <div
         ref={chatWindowRef}
         style={{
-          flexGrow: 1,
-          maxHeight: 280,
+          flexGrow: 0.9,
+          maxHeight: 350,
+          minHeight: 200,
           overflowY: "auto",
           marginBottom: 16,
           border: "1px solid #ccc",
@@ -400,28 +403,53 @@ function IndexPopup() {
               {renderMessage(msg)}
             </div>
             {!(msg.role === "assistant" && msg.content === '🤔') && (
-              <span
-                onClick={async () => {
-                  const newChatLog = [...chatLog];
-                  newChatLog.splice(idx, 1);
-                  await setChatLog(newChatLog);
-                }}
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  right: 0,
-                  cursor: "pointer",
-                  fontSize: 12,
-                  fontWeight: "bold",
-                  padding: "2px 5px",
-                  borderRadius: "50%",
-                  backgroundColor: "rgba(0, 0, 0, 0.1)",
-                  color: "#fff",
-                  paddingTop: "0px",
-                }}
-              >
-              x
-            </span>
+              <div>
+                <span
+                  onClick={async () => {
+                    const newChatLog = [...chatLog];
+                    newChatLog.splice(idx, 1);
+                    await setChatLog(newChatLog);
+                  }}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    right: 0,
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontWeight: "bold",
+                    padding: "2px 5px",
+                    borderRadius: "50%",
+                    backgroundColor: "rgba(0, 0, 0, 0.1)",
+                    color: "#fff",
+                    paddingTop: "0px",
+                  }}
+                >
+                  x
+                </span>
+                <span
+                  onClick={async () => {
+                    const newChatLog = [...chatLog];
+                    if (idx + 1 < newChatLog.length) newChatLog.splice(idx + 1, newChatLog.length - (idx + 1));
+                    await setChatLog([...newChatLog, { role: "assistant", content: '🤔' }]);
+                    nextTick(() => sendToBot(newChatLog));
+                  }}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    right: "20px",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontWeight: "bold",
+                    padding: "2px 5px",
+                    borderRadius: "50%",
+                    backgroundColor: "rgba(0, 0, 0, 0.1)",
+                    color: "#fff",
+                    paddingTop: "0px",
+                  }}
+                >
+                  r
+                </span>
+              </div>
             )}
           </div>
         ))}

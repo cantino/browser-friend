@@ -48,7 +48,12 @@ export function fill(cssSelector: string, value: string): boolean {
     (element as HTMLInputElement).checked = value.toLowerCase() === 'true' || value === '1' || value.toLowerCase() === 't' || value.toLowerCase() === 'on';
     return true;
   } else {
-    console.error(`Unsupported element type for selector: ${cssSelector}`);
-    return false;
+    try {
+      (element as HTMLInputElement).value = value as string;
+      return true;
+    } catch (e) {
+      console.error(`Failed to fill element with selector: ${cssSelector}`);
+      return false;
+    }
   }
 }
