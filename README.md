@@ -1,4 +1,27 @@
-This is a [Plasmo extension](https://docs.plasmo.com/) project bootstrapped with [`plasmo init`](https://www.npmjs.com/package/plasmo).
+# Browser Friend
+
+GPT4 embedded in your browser, with the ability to use tools.
+
+Current tools:
+
+```
+type RequestDOM = { cssSelector: string }; // Receive a summarized DOM for a selector.
+type RequestText = { cssSelector: string }; // Request the visible text inside of a page region
+type GetSelection = "GetSelection"; // Request the user's currently highlighted text
+type Fill = { cssSelector: string, text: string } // To fill in form fields
+type Calculate = { jsFormula: string } // To eval arbitrary JS in a sandbox, and return the result to the assistant.
+type Respond = { textToDisplay: string } // To display a response to the user
+```
+
+Examples:
+
+![hn-math](https://user-images.githubusercontent.com/83835/229370856-f05334fe-e03d-4c34-b099-c70e5ae94313.gif)
+
+![hn-post](https://user-images.githubusercontent.com/83835/229370860-dbac54ea-4d9e-40ee-ba89-bd7593b92af9.gif)
+
+# Development
+
+This extension is based on [Plasmo](https://docs.plasmo.com/) and was bootstrapped with [`plasmo init`](https://www.npmjs.com/package/plasmo).
 
 ## Getting Started
 
@@ -11,10 +34,6 @@ npm run dev
 ```
 
 Open your browser and load the appropriate development build. For example, if you are developing for the chrome browser, using manifest v3, use: `build/chrome-mv3-dev`.
-
-You can start editing the popup by modifying `popup.tsx`. It should auto-update as you make changes. To add an options page, simply add a `options.tsx` file to the root of the project, with a react component default exported. Likewise to add a content page, add a `content.ts` file to the root of the project, importing some module and do some logic, then reload the extension on your browser.
-
-For further guidance, [visit our Documentation](https://docs.plasmo.com/)
 
 ## Making production build
 
