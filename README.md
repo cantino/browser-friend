@@ -15,9 +15,15 @@ type Respond = { textToDisplay: string } // To display a response to the user
 
 Examples:
 
+This example includes DOM viewing and form filling:
+![hn-post](https://user-images.githubusercontent.com/83835/229370860-dbac54ea-4d9e-40ee-ba89-bd7593b92af9.gif)
+
+This example includes DOM viewing, text fetching, and doing a calculation in a sandbox:
 ![hn-math](https://user-images.githubusercontent.com/83835/229370856-f05334fe-e03d-4c34-b099-c70e5ae94313.gif)
 
-![hn-post](https://user-images.githubusercontent.com/83835/229370860-dbac54ea-4d9e-40ee-ba89-bd7593b92af9.gif)
+More advanced calculation (sometimes it writes a recursive version if you don't encourage it not to):
+![fib](https://user-images.githubusercontent.com/83835/229373363-b0bcfec9-6729-455a-ba0d-cd8ef17c66a6.gif)
+
 
 # Development
 
